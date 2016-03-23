@@ -55,24 +55,24 @@ mu0(1)  = 0; %always zero
 mu1(1) =  mu;
 for zt = 1:N-1
     % compute q0 (11.17)   (q0 = cumsum(P))
-    q0(zt+1) = 50; %TODO #2;
+    q0(zt+1) = 50; %TODO #3;
     
     % compute mu0 (11.18)
     if q0(zt+1)>0  %mu0f = cumsum(zP)./q0f;
-        mu0(zt+1)   =  20; %TODO #3
+        mu0(zt+1)   =  20; %TODO #4
     else  % avoid divide by zero error
         mu0(zt+1)   = 0;
     end
     
     %compute mu1 (11.19)
     if q0(zt+1) < 1
-        mu1(zt+1) =  20; %TODO #4
+        mu1(zt+1) =  20; %TODO #5
     else  % avoid divide by zero error
         mu1(zt+1) = zt+1;
     end
     
     % compute sigb2 (11.16), the between-group variance
-    sigb2(zt+1) = 20; %TODO #5
+    sigb2(zt+1) = 20; %TODO #6
     
 end
 
