@@ -1,23 +1,25 @@
 function PotentialFieldNavigation
+%PotentialFieldNavigation
 % A path planner for an n-link planar robot arm moving amoung polygonal obstacles.
 %
 % Based off chapter 5.2 in "Robot Modeling and Control" by Spong, Hutchinson,
 % and Vidyasagar
 %
-% Aaron T Becker, 04-13-2016, atbecker@uh.edu
+% Aaron T. Becker, 04-13-2016, atbecker@uh.edu
 %
 %  Items to complete are marked with "TODO:"
+%  ideas: save the full path, and display in another figure.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 linkLen = [2;2;];  %lengths of each link
 %q = rand(numel(linkLen),1)*2*pi;  %robot configuration (random)
 q = [pi/2;pi/4]; %robot configuration (set)
 %qGoal = rand(numel(linkLen),1)*2*pi; %TODO: some sort of check to make sure this isn't intersecting an obstacle
 qGoal = [-pi/2;-pi/2];
-oGoal = computeOrigins(qGoal); %robot goal DH origins
+oGoal = computeOrigins(qGoal); %robot goal DH frame origins
 ptObstacles = [1.5,2;  -0.5,0.5]; %locations of point obstacles
 
 
-% Parameters  (students should change these)
+%%% Parameters  (students should change these)
 zeta =   flipud(.1*cumsum(ones(numel(q),1)));%zeta: vector parameter that scales the forces for each degree-of-freedom
 alpha = 0.02; %step size for each iteration.  In motion planning problems, the choice for alpha is often made on and adhoc or empirical basis, such as the distance to the nearest obstacle or goal
 d = 0.5; %d: the distance that defines the transition from conic toparabolic
@@ -26,18 +28,41 @@ rhoNot = 1/2; %: defines the distance of influence of the obstacle
 inLocalMinimum = false;
 t = 5;  %how many random steps to take?
 v = pi/10; % maximum random value at each step
+IsPolygonObs = false; % if tru, uses polygonal obstacles
 
-%setup figure
+
+%setup figure showing the robot
 figure(1);clf;
 r = sum(linkLen);
 rectangle('Position',[-r,-r,2*r,2*r],'Curvature',1,'FaceColor',[.9 .9 1]) %robot workspace
 axis equal
 hold on
 % draw obstacles
-for j = 1:numel(ptObstacles(:,2))
-    rectangle('Position',[ptObstacles(j,1)-rhoNot,ptObstacles(j,2)-rhoNot,2*rhoNot,2*rhoNot],'Curvature',1,'FaceColor',[1 .8 .8],'LineStyle','none')
+if IsPolygonObs
+    ptObstacles = [1,2; -3,-1];
+    polyObs1 = repmat(ptObstacles(1,:),3,1)+[.5000    0.8660
+        -1.0000    0.0000
+        0.5000   -0.8660];
+    
+    polyObs2 = repmat(ptObstacles(2,:),4,1)+[-1/2    -1
+        -1/2    1
+        1/2   1
+        1/2 -1];
+    
+    p1 = fill(polyObs1(:,1),polyObs1(:,2),'r');
+    set(p1,'linewidth',40,'EdgeColor',[1 .8 .8] );
+    fill(polyObs1(:,1),polyObs1(:,2),'r');
+    p2 = fill(polyObs2(:,1),polyObs2(:,2),'r');
+    set(p2,'linewidth',40,'EdgeColor',[1 .8 .8] );
+    fill(polyObs2(:,1),polyObs2(:,2),'r');
+    
+else
+    for j = 1:numel(ptObstacles(:,2))
+        rectangle('Position',[ptObstacles(j,1)-rhoNot,ptObstacles(j,2)-rhoNot,2*rhoNot,2*rhoNot],'Curvature',1,'FaceColor',[1 .8 .8],'LineStyle','none')
+    end
+    plot(ptObstacles(:,1),ptObstacles(:,2),'r*')
 end
-plot(ptObstacles(:,1),ptObstacles(:,2),'r*')
+
 %draw robot
 hGline = line([0,0],[0,1],'color','g');
 hGpts = plot([0,0],[0,1],'og');
@@ -48,7 +73,7 @@ hold off
 hTitle = title(num2str(0));
 maxIters = 2000;
 
-for iteration = 1:maxIters
+for iteration = 1:maxIters  %each iteration performs gradient descent one time
     %calulate error
     qErr = sum(atan2(sin(q-qGoal),cos(q-qGoal)).^2);
     oR = computeOrigins(q);
@@ -81,7 +106,7 @@ for iteration = 1:maxIters
     
     
     if inLocalMinimum
-        %TODO: Task 4  (5pts) random walk:  
+        %TODO: Task 4  (5pts) random walk:
         %execute a random walk.  If it results in collision, do not apply
         %it.
         qprime = q;
@@ -97,7 +122,7 @@ end
 
     function J = Jv(q,ic) %page 177
         o = computeOrigins(q);
-        Augo = [0,0;o];  %add frame 0
+        Augo = [0,0;o];  %add frame 0  (augmented origin)
         % J = [z0 x (o_c - o_0),  z1 x (o_c - o_2), ...., z_(n-1) x (o_c - o_(n-1))
         J = zeros(2,numel(q));
         for c = 1:ic
@@ -106,11 +131,10 @@ end
             J(2,c) = oDiff(1);
         end
         
-        %topRowManipJacobian =  fliplr([-o(:,2)';o(:,1)']);
     end
 
     function Fvec =  fatt(q, oGoal,zeta,d)
-        %computes the forces that attract each DH frame origin to their goal
+        %fatt computes the forces that attract each DH frame origin to their goal
         %configurations, given by equation 5.4 in RD&C
         %q: configuration of the arm
         %oGoal: goal position of each DH frame origin
@@ -130,7 +154,7 @@ end
     end
 
     function o = computeOrigins(q)
-        %o = zeros(numel(q),2); %(x,y) coordinate of every origin frame
+        %Computes o, the (x,y) coordinate of the DH frame for each link in q
         qSum = cumsum(q);
         oDelta = [linkLen,linkLen].*[cos(qSum),sin(qSum)];
         o = cumsum(oDelta);
@@ -138,13 +162,13 @@ end
 
     function Fvec =  frepPt(q, pObstacle, eta, rhoNot)
         % TODO: Task 1  (5pts) repulsion from point obstacle
-        %computes the forces that repel each DH frame origin from a point
+        %frepPt computes the forces that repel each DH frame origin from a point
         %at positon pObstacle, given by equation 5.6 & 5.7 in RD&C
         %q: configuration of the arm
         %pObstacle: xy position of the point obstacle
         %eta: vector parameter that scales the forces for each degree-of-freedom
         %rhoNot: defines the distance of influence of the obstacle
-        Fvec = zeros(numel(q),2); %Force vector to attract each origin to the goal
+        Fvec = zeros(numel(q),2); %Force vector to repulse each origin from the obstacle
         o = computeOrigins(q); % o is a vector of the origins for DH frames of a planar robot arm.
         
         for i = 1:numel(q) % compute attractive force for each origin
@@ -157,8 +181,8 @@ end
         end
     end
 
-function Fvec =  frepPtFloatingPoint(q, pObstacle, eta, rhoNot)
-        % Task 2  (Graduate students 5pts, Undergrads, 5pts E.C.):  
+    function Fvec =  frepPtFloatingPoint(q, pObstacle, eta, rhoNot)
+        % Task 2  (Graduate students 5pts, Undergrads, 5pts E.C.):
         %computes the forces that repel a point on the link that is closest to any workspace obstacle
         %at positon pObstacle, given by equation 5.6 & 5.7 in RD&C
         %q: configuration of the arm
@@ -178,12 +202,12 @@ function Fvec =  frepPtFloatingPoint(q, pObstacle, eta, rhoNot)
         end
     end
 
-    function updateArm(o,hline,hpts)
+    function updateArm(o,hline,hpts) %redraws arm
         set(hline, 'xdata',[0;o(:,1)], 'ydata',[0;o(:,2)]);
         set(hpts, 'xdata',[0;o(:,1)], 'ydata',[0;o(:,2)]);
     end
 
-    function d = dist(a,b)
+    function d = dist(a,b)% norm 2 distance between two vectors
         d=sum((a-b).^2).^.5;
     end
 end
