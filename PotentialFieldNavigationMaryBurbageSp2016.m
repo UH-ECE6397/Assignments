@@ -12,12 +12,29 @@ function PotentialFieldNavigationMaryBurbageSp2016
 %
 %  Items to complete are marked with "TODO:"
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% %% A FUN 4-link example
 linkLen = [1;1;1;1];  %lengths of each link
+q = [pi/2;0;pi/4;0]; %robot configuration (set)
+qGoal = [-pi/2;0;-pi/2;0];
+rhoNot = 1.5; %: defines the distance of influence of the obstacle
+
+% %% ACTUAL ASSIGNMENT
+% linkLen = [2;2];  %lengths of each link
+% q = [pi/2;pi/4]; %robot configuration (set)
+% qGoal = [-pi/2;-pi/2];
+% rhoNot = 1/2; %: defines the distance of influence of the obstacle
+
+%%% this makes the random generator the same each run.  Useful for
+%%% debugging
+s = RandStream('mt19937ar','Seed',1);
+RandStream.setGlobalStream(s);
+
+
 moveWeight = flipud(cumsum(flipud(linkLen))); %moving a base link moves all futher links, so moves of base links are penalized more than distal links
 %q = rand(numel(linkLen),1)*2*pi;  %robot configuration (random)
-q = [pi/2;0;pi/4;0]; %robot configuration (set)
+
 %qGoal = rand(numel(linkLen),1)*2*pi; %TODO: some sort of check to make sure this isn't intersecting an obstacle
-qGoal = [-pi/2;0;-pi/2;0];
+
 oGoal = computeOrigins(qGoal); %robot goal DH origins
 ptObstacles = [1.5,2;  -0.5,0.5]; %locations of point obstacles
 q_recent = zeros(numel(q),4); %recent positions of robot arm
@@ -27,10 +44,10 @@ zeta = flipud(.1*cumsum(ones(numel(q),1)));%zeta: vector parameter that scales t
 alpha = 0.02; %step size for each iteration.  In motion planning problems, the choice for alpha is often made on an ad hoc or empirical basis, such as the distance to the nearest obstacle or goal
 d = 0.5; %d: the distance that defines the transition from conic to parabolic
 eta = ones(numel(q),1); %eta: vector parameter that scales the repulsive forces for each degree-of-freedom
-rhoNot = 2.5; %: defines the distance of influence of the obstacle
+
 inLocalMinimum = false;
-t = 30;  %how many random steps to take?
-v = pi/8; % maximum random value at each step (* link length is max step size, 2*v
+t = 100;  %how many random steps to take?
+v = pi/8; % maximum random value at each step ( link length is max step size, 2*v)
 eps_m = 0.02; %epsilon_m:  limit for step sizes for determining local minima
 isPolygonObs = false; % if true, uses polygonal obstacles
 
@@ -43,7 +60,7 @@ axis equal
 hold on
 % draw obstacles
 if isPolygonObs
-    ptObstacles = [1,2; -3,-1];
+    ptObstacles = [1,2; -3,-1]; %#ok<UNRCH>
     polyObs1 = repmat(ptObstacles(1,:),3,1)+[.5000    0.8660
         -1.0000    0.0000
         0.5000   -0.8660];
@@ -67,14 +84,16 @@ else
     plot(ptObstacles(:,1),ptObstacles(:,2),'r*')
 end
 %draw robot
-hGline = line([0,0],[0,1],'color','g');
-hGpts = plot([0,0],[0,1],'og');
-hRline = line([0,0],[0,1],'color','b');
-hRpts = plot([0,0],[0,1],'ob');
+hGline = line([0,0],[0,1],'color','g','linewidth',4);
+hGpts = plot([0,0],[0,1],'og','markersize',12);
+hRline = line([0,0],[0,1],'color','b','linewidth',4);
+hRpts = plot([0,0],[0,1],'ob','markersize',12);
 harr= quiver(0,0,1,2,'color',[0,0.8,0],'linewidth',2);
 hrep= quiver(0,0,1,2,'color',[0,0,1],'linewidth',2);
 hold off
 hTitle = title(num2str(0));
+set(hTitle,'fontsize',24);
+set(gca,'fontsize',20)
 maxIters = 2000;
 hClosestLine = zeros(numel(ptObstacles(:,2))*numel(linkLen),1);
 for j = 1:numel(ptObstacles(:,2))*numel(linkLen);
@@ -89,7 +108,6 @@ for iteration = 1:maxIters  %each iteration performs gradient descent one time
     %calulate error
     qErr = sum(atan2(sin(q-qGoal),cos(q-qGoal)).^2);
     oR = computeOrigins(q);
-    frep = zeros([numel(q),2]);
     for j = 1:numel(ptObstacles(:,1))
         [Frep,clpts] = frepPtFloatingPoint(q, ptObstacles(j,:), eta, rhoNot);
         for n = 1:numel(q)
@@ -127,7 +145,8 @@ for iteration = 1:maxIters  %each iteration performs gradient descent one time
     end
     
     %Gradient descent algorithm, page 179
-    q = q+alpha*tau/norm(tau);
+    amin = min(alpha, 1/2*max(abs(q-qGoal)));
+    q = q+amin*tau/norm(tau);
     
     %TODO Task 3  (5pts) detect a local minimum
     q_recent = [q_recent(:,2:end) q];
@@ -145,9 +164,9 @@ for iteration = 1:maxIters  %each iteration performs gradient descent one time
         qprime = q;
         for j =1:t
             %generate random +/-1 for each link
-            vsign = rand([numel(linkLen) 1]);
-            vsign(vsign<0.5)=-1;
-            vsign(vsign>=0.5)=1;
+            vsign = -1+2*rand([numel(q) 1]);
+            %vsign(vsign<0.5)=-1;
+            %vsign(vsign>=0.5)=1;
             vsign = vsign./moveWeight;
             %only assign random walk steps to joints that are further than
             %eps_m from goal
@@ -305,6 +324,8 @@ end
     end
 
     function collision =  checkCollision(q, pObstacle)
+        %TODO: this should compare the swept out region of the robot and
+        %ensure that region does not include the obstacle
         %computes the point on the link that is closest to any workspace obstacle
         %at position pObstacle, if it is at the same location as the
         %obstacle, the two are in collision
